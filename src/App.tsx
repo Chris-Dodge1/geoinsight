@@ -1,9 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type ArcGISMap from "@arcgis/core/Map";
 
 import {
   createEarthquakeLayer,
-  sampleEarthquakes,
+  type Earthquake,
 } from "./gis/earthquakeLayer";
 
 import {
@@ -12,20 +12,90 @@ import {
   createSearchRadiusLayer,
 } from "./gis/spatialSearch";
 
+import { fetchEarthquakes } from "./services/usgsService";
+import { convertUSGSFeed } from "./gis/usgsAdapter";
+
+type FeedStatus = "loading" | "ready" | "error";
+
+// Replace the map's earthquake markers.
+function updateEarthquakeLayer(
+  map: ArcGISMap,
+  earthquakes: Earthquake[]
+) {
+  const existing = map.findLayerById("earthquake-markers");
+
+  if (existing) {
+    map.remove(existing);
+  }
+
+  map.add(createEarthquakeLayer(earthquakes));
+}
+
 function App() {
   const mapRef = useRef<ArcGISMap | null>(null);
+
+  const [mapReady, setMapReady] = useState(false);
+  const [earthquakes, setEarthquakes] = useState<Earthquake[]>([]);
+  const [feedStatus, setFeedStatus] = useState<FeedStatus>("loading");
+  const [feedError, setFeedError] = useState<string | null>(null);
 
   const [selectedLocation, setSelectedLocation] =
     useState("Riverside");
 
   const [radiusKm, setRadiusKm] = useState(50);
-  const [resultCount, setResultCount] =
-    useState<number | null>(null);
-
   const [isSearching, setIsSearching] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [searchSummary, setSearchSummary] =
+    useState<string | null>(null);
+  const [searchError, setSearchError] =
+    useState<string | null>(null);
 
-  // Run a geographic radius search
+  // Fetch and process live USGS earthquake observations.
+  useEffect(() => {
+    let active = true;
+
+    async function loadEarthquakes() {
+      try {
+        const rawData = await fetchEarthquakes();
+        const converted = convertUSGSFeed(rawData);
+
+        if (!active) return;
+
+        setEarthquakes(converted);
+        setFeedStatus("ready");
+      } catch (error) {
+        if (!active) return;
+
+        console.error("USGS data loading failed:", error);
+
+        setFeedError(
+          error instanceof Error
+            ? error.message
+            : "Unable to retrieve earthquake data."
+        );
+
+        setFeedStatus("error");
+      }
+    }
+
+    void loadEarthquakes();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Display live earthquake markers once the map and data are ready.
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!mapReady || !map || feedStatus !== "ready") {
+      return;
+    }
+
+    updateEarthquakeLayer(map, earthquakes);
+  }, [mapReady, earthquakes, feedStatus]);
+
+  // Search the live earthquake dataset by geographic radius.
   const handleSearch = async () => {
     const map = mapRef.current;
 
@@ -33,82 +103,71 @@ function App() {
       (item) => item.name === selectedLocation
     );
 
-    if (!map || !location) {
-      setError("Map or search location is not ready.");
+    if (!map || !location || feedStatus !== "ready") {
+      setSearchError("Map or earthquake data is not ready.");
       return;
     }
 
     setIsSearching(true);
-    setError(null);
+    setSearchError(null);
 
     try {
-      // Find earthquakes within the selected radius
       const results = await searchEarthquakesByRadius(
-        sampleEarthquakes,
+        earthquakes,
         location,
         radiusKm
       );
 
-      // Create the geographic buffer circle
       const radiusLayer = await createSearchRadiusLayer(
         location,
         radiusKm
       );
 
-      // Create markers for matching earthquakes
-      const earthquakeLayer = createEarthquakeLayer(results);
+      // Remove the previous search boundary.
+      const previousRadius = map.findLayerById("search-radius");
 
-      // Remove previous search layers
-      const oldRadius = map.findLayerById("search-radius");
-      const oldEarthquakes =
-        map.findLayerById("earthquake-markers");
-
-      if (oldRadius) {
-        map.remove(oldRadius);
+      if (previousRadius) {
+        map.remove(previousRadius);
       }
 
-      if (oldEarthquakes) {
-        map.remove(oldEarthquakes);
-      }
-
-      // Add radius underneath earthquake markers
+      // Add the boundary first so markers appear above it.
       map.add(radiusLayer);
-      map.add(earthquakeLayer);
+      updateEarthquakeLayer(map, results);
 
-      setResultCount(results.length);
-    } catch (err) {
-      console.error("Spatial search failed:", err);
-      setError("Unable to complete spatial search.");
+      setSearchSummary(
+        `Found ${results.length} earthquake(s) within ` +
+        `${radiusKm} km of ${location.name}.`
+      );
+    } catch (error) {
+      console.error("Spatial search failed:", error);
+      setSearchError("Unable to complete spatial search.");
     } finally {
       setIsSearching(false);
     }
   };
 
-  // Restore the original map
+  // Restore all live earthquakes on the map.
   const resetSearch = () => {
     const map = mapRef.current;
 
-    if (!map) {
+    if (!map || feedStatus !== "ready") {
       return;
     }
 
-    const oldRadius = map.findLayerById("search-radius");
-    const oldEarthquakes =
-      map.findLayerById("earthquake-markers");
+    const radiusLayer = map.findLayerById("search-radius");
 
-    if (oldRadius) {
-      map.remove(oldRadius);
+    if (radiusLayer) {
+      map.remove(radiusLayer);
     }
 
-    if (oldEarthquakes) {
-      map.remove(oldEarthquakes);
-    }
+    updateEarthquakeLayer(map, earthquakes);
 
-    map.add(createEarthquakeLayer(sampleEarthquakes));
-
-    setResultCount(null);
-    setError(null);
+    setSearchSummary(null);
+    setSearchError(null);
   };
+
+  const controlsDisabled =
+    !mapReady || feedStatus !== "ready" || isSearching;
 
   return (
     <main className="app-container">
@@ -163,7 +222,7 @@ function App() {
             <button
               className="search-button"
               onClick={handleSearch}
-              disabled={isSearching}
+              disabled={controlsDisabled}
             >
               {isSearching ? "Searching..." : "Search"}
             </button>
@@ -171,23 +230,42 @@ function App() {
             <button
               className="reset-button"
               onClick={resetSearch}
-              disabled={isSearching}
+              disabled={controlsDisabled}
             >
               Reset
             </button>
           </div>
         </div>
 
-        {resultCount !== null && (
-          <p className="search-result" role="status">
-            Found {resultCount} earthquake(s) within
-            {" "}{radiusKm} km of {selectedLocation}.
+        {feedStatus === "loading" && (
+          <p className="legend-note" role="status">
+            Loading earthquake data from USGS...
           </p>
         )}
 
-        {error && (
+        {feedStatus === "ready" && (
+          <p className="legend-note" role="status">
+            Loaded {earthquakes.length} earthquake observations
+            from the USGS past-day feed within the configured
+            Southern California region.
+          </p>
+        )}
+
+        {feedStatus === "error" && (
           <p className="search-error" role="alert">
-            {error}
+            USGS data error: {feedError}
+          </p>
+        )}
+
+        {searchSummary && (
+          <p className="search-result" role="status">
+            {searchSummary}
+          </p>
+        )}
+
+        {searchError && (
+          <p className="search-error" role="alert">
+            {searchError}
           </p>
         )}
       </section>
@@ -205,14 +283,8 @@ function App() {
               return;
             }
 
-            const map = component.map;
-            mapRef.current = map;
-
-            if (!map.findLayerById("earthquake-markers")) {
-              map.add(
-                createEarthquakeLayer(sampleEarthquakes)
-              );
-            }
+            mapRef.current = component.map;
+            setMapReady(true);
           }}
           style={{
             display: "block",
@@ -247,8 +319,9 @@ function App() {
         </div>
 
         <p className="legend-note">
-          Demonstration earthquake data.
-          Live USGS integration coming soon.
+          Earthquake observations provided by USGS.
+          Data is loaded when the application opens.
+          Regional boundaries are approximate.
         </p>
       </section>
 
