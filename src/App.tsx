@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type ArcGISMap from "@arcgis/core/Map";
 
 import {
@@ -12,10 +12,17 @@ import {
   createSearchRadiusLayer,
 } from "./gis/spatialSearch";
 
+import { filterEarthquakesByMagnitude } from "./gis/magnitudeFilter";
 import { fetchEarthquakes } from "./services/usgsService";
 import { convertUSGSFeed } from "./gis/usgsAdapter";
 
 type FeedStatus = "loading" | "ready" | "error";
+
+interface ActiveSearch {
+  locationName: string;
+  radiusKm: number;
+  earthquakes: Earthquake[];
+}
 
 // Replace the map's earthquake markers.
 function updateEarthquakeLayer(
@@ -36,20 +43,32 @@ function App() {
 
   const [mapReady, setMapReady] = useState(false);
   const [earthquakes, setEarthquakes] = useState<Earthquake[]>([]);
-  const [feedStatus, setFeedStatus] = useState<FeedStatus>("loading");
-  const [feedError, setFeedError] = useState<string | null>(null);
+  const [feedStatus, setFeedStatus] =
+    useState<FeedStatus>("loading");
+  const [feedError, setFeedError] = useState<string | null>(
+    null
+  );
 
   const [selectedLocation, setSelectedLocation] =
     useState("Riverside");
 
   const [radiusKm, setRadiusKm] = useState(50);
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchSummary, setSearchSummary] =
-    useState<string | null>(null);
-  const [searchError, setSearchError] =
-    useState<string | null>(null);
 
-  // Fetch and process live USGS earthquake observations.
+  // null means all earthquake magnitudes.
+  const [minMagnitude, setMinMagnitude] = useState<
+    number | null
+  >(null);
+
+  const [activeSearch, setActiveSearch] =
+    useState<ActiveSearch | null>(null);
+
+  const [isSearching, setIsSearching] = useState(false);
+
+  const [searchError, setSearchError] = useState<
+    string | null
+  >(null);
+
+  // Load live USGS observations when the application opens.
   useEffect(() => {
     let active = true;
 
@@ -61,6 +80,7 @@ function App() {
         if (!active) return;
 
         setEarthquakes(converted);
+        setFeedError(null);
         setFeedStatus("ready");
       } catch (error) {
         if (!active) return;
@@ -84,7 +104,20 @@ function App() {
     };
   }, []);
 
-  // Display live earthquake markers once the map and data are ready.
+  // Apply magnitude filtering to either all earthquakes
+  // or the results of the current radius search.
+  const visibleEarthquakes = useMemo(() => {
+    const source = activeSearch
+      ? activeSearch.earthquakes
+      : earthquakes;
+
+    return filterEarthquakesByMagnitude(
+      source,
+      minMagnitude
+    );
+  }, [earthquakes, activeSearch, minMagnitude]);
+
+  // Update ArcGIS markers whenever the visible dataset changes.
   useEffect(() => {
     const map = mapRef.current;
 
@@ -92,10 +125,10 @@ function App() {
       return;
     }
 
-    updateEarthquakeLayer(map, earthquakes);
-  }, [mapReady, earthquakes, feedStatus]);
+    updateEarthquakeLayer(map, visibleEarthquakes);
+  }, [mapReady, feedStatus, visibleEarthquakes]);
 
-  // Search the live earthquake dataset by geographic radius.
+  // Search earthquake observations within the chosen radius.
   const handleSearch = async () => {
     const map = mapRef.current;
 
@@ -123,21 +156,22 @@ function App() {
         radiusKm
       );
 
-      // Remove the previous search boundary.
-      const previousRadius = map.findLayerById("search-radius");
+      const previousRadius =
+        map.findLayerById("search-radius");
 
       if (previousRadius) {
         map.remove(previousRadius);
       }
 
-      // Add the boundary first so markers appear above it.
+      // Add the radius boundary below the earthquake markers.
       map.add(radiusLayer);
-      updateEarthquakeLayer(map, results);
 
-      setSearchSummary(
-        `Found ${results.length} earthquake(s) within ` +
-        `${radiusKm} km of ${location.name}.`
-      );
+      // The magnitude filter is applied automatically.
+      setActiveSearch({
+        locationName: location.name,
+        radiusKm,
+        earthquakes: results,
+      });
     } catch (error) {
       console.error("Spatial search failed:", error);
       setSearchError("Unable to complete spatial search.");
@@ -146,7 +180,7 @@ function App() {
     }
   };
 
-  // Restore all live earthquakes on the map.
+  // Clear the radius search while keeping the magnitude filter.
   const resetSearch = () => {
     const map = mapRef.current;
 
@@ -160,9 +194,7 @@ function App() {
       map.remove(radiusLayer);
     }
 
-    updateEarthquakeLayer(map, earthquakes);
-
-    setSearchSummary(null);
+    setActiveSearch(null);
     setSearchError(null);
   };
 
@@ -176,17 +208,19 @@ function App() {
         <p>Southern California Earthquake Analytics</p>
       </header>
 
-      {/* Geographic Search Controls */}
       <section className="search-panel">
-        <h2>Geographic Radius Search</h2>
+        <h2>Earthquake Search &amp; Filtering</h2>
 
         <div className="search-controls">
           <div className="search-field">
-            <label htmlFor="location">Search Location</label>
+            <label htmlFor="location">
+              Search Location
+            </label>
 
             <select
               id="location"
               value={selectedLocation}
+              disabled={isSearching}
               onChange={(event) =>
                 setSelectedLocation(event.target.value)
               }
@@ -203,11 +237,14 @@ function App() {
           </div>
 
           <div className="search-field">
-            <label htmlFor="radius">Search Radius</label>
+            <label htmlFor="radius">
+              Search Radius
+            </label>
 
             <select
               id="radius"
               value={radiusKm}
+              disabled={isSearching}
               onChange={(event) =>
                 setRadiusKm(Number(event.target.value))
               }
@@ -215,6 +252,33 @@ function App() {
               <option value={25}>25 km</option>
               <option value={50}>50 km</option>
               <option value={100}>100 km</option>
+            </select>
+          </div>
+
+          <div className="search-field">
+            <label htmlFor="minimum-magnitude">
+              Minimum Magnitude
+            </label>
+
+            <select
+              id="minimum-magnitude"
+              value={
+                minMagnitude === null
+                  ? "all"
+                  : String(minMagnitude)
+              }
+              disabled={feedStatus !== "ready"}
+              onChange={(event) => {
+                const value = event.target.value;
+
+                setMinMagnitude(
+                  value === "all" ? null : Number(value)
+                );
+              }}
+            >
+              <option value="all">All magnitudes</option>
+              <option value="2.5">Magnitude 2.5+</option>
+              <option value="4">Magnitude 4.0+</option>
             </select>
           </div>
 
@@ -245,9 +309,10 @@ function App() {
 
         {feedStatus === "ready" && (
           <p className="legend-note" role="status">
-            Loaded {earthquakes.length} earthquake observations
-            from the USGS past-day feed within the configured
-            Southern California region.
+            Showing {visibleEarthquakes.length} of{" "}
+            {earthquakes.length} USGS past-day earthquake
+            observations in the configured Southern
+            California region.
           </p>
         )}
 
@@ -257,9 +322,15 @@ function App() {
           </p>
         )}
 
-        {searchSummary && (
+        {activeSearch && (
           <p className="search-result" role="status">
-            {searchSummary}
+            Found {visibleEarthquakes.length} earthquake(s)
+            within {activeSearch.radiusKm} km of{" "}
+            {activeSearch.locationName}
+            {minMagnitude !== null
+              ? ` at magnitude ${minMagnitude.toFixed(1)}+`
+              : ""}
+            .
           </p>
         )}
 
@@ -270,7 +341,6 @@ function App() {
         )}
       </section>
 
-      {/* ArcGIS Map */}
       <section className="map-container">
         <arcgis-map
           basemap="osm"
@@ -297,7 +367,6 @@ function App() {
         </arcgis-map>
       </section>
 
-      {/* Magnitude Legend */}
       <section className="earthquake-legend">
         <h3>Earthquake Magnitude</h3>
 
