@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type ArcGISMap from "@arcgis/core/Map";
+import EarthquakeDashboard from "./components/EarthquakeDashboard";
+import { calculateDashboardStats } from "./components/dashboardStats";
 
 import {
   createEarthquakeLayer,
@@ -116,6 +118,18 @@ function App() {
       minMagnitude
     );
   }, [earthquakes, activeSearch, minMagnitude]);
+
+  // Use the same dataset as the markers, including both active filters.
+  const dashboardStats = useMemo(
+    () => calculateDashboardStats(visibleEarthquakes),
+    [visibleEarthquakes]
+  );
+
+  const dashboardScope = `${activeSearch
+    ? `Within ${activeSearch.radiusKm} km of ${activeSearch.locationName}`
+    : "Southern California"} · ${minMagnitude === null
+    ? "All magnitudes"
+    : `Magnitude ${minMagnitude.toFixed(1)}+`}`;
 
   // Update ArcGIS markers whenever the visible dataset changes.
   useEffect(() => {
@@ -340,6 +354,12 @@ function App() {
           </p>
         )}
       </section>
+
+      <EarthquakeDashboard
+        stats={dashboardStats}
+        status={feedStatus}
+        scopeLabel={dashboardScope}
+      />
 
       <section className="map-container">
         <arcgis-map

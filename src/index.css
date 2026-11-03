@@ -249,6 +249,83 @@ body {
   margin-top: 12px;
 }
 
+/* Earthquake Analytics Dashboard */
+
+.earthquake-dashboard {
+  margin-bottom: 20px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.dashboard-header h2 {
+  margin: 0 0 8px;
+  font-size: 19px;
+  color: #111827;
+}
+
+.dashboard-header p,
+.dashboard-source,
+.dashboard-card-label {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dashboard-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.dashboard-card-value {
+  margin: 8px 0 0;
+  color: #111827;
+  font-size: 28px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .search-field {
+    min-width: 0;
+  }
+
+  .search-actions {
+    flex-wrap: wrap;
+  }
+}
+
 @media (max-width: 768px) {
   .search-controls {
     flex-direction: column;
