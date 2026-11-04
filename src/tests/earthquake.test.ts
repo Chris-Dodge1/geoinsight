@@ -1,6 +1,5 @@
 
-import test from "node:test";
-import assert from "node:assert/strict";
+import { test, expect } from "vitest";
 
 import type { EarthquakeFeature } from "../types/earthquake";
 
@@ -55,7 +54,7 @@ const newYork = makeEarthquake(
 );
 
 test("accepts a valid earthquake", () => {
-  assert.equal(isValidEarthquake(losAngeles), true);
+  expect(isValidEarthquake(losAngeles)).toBe(true);
 });
 
 test("rejects an earthquake with missing magnitude", () => {
@@ -63,7 +62,7 @@ test("rejects an earthquake with missing magnitude", () => {
     "invalid", null, -118.24, 34.05, 1000
   );
 
-  assert.equal(isValidEarthquake(invalid), false);
+  expect(isValidEarthquake(invalid)).toBe(false);
 });
 
 test("rejects invalid coordinates", () => {
@@ -71,7 +70,7 @@ test("rejects invalid coordinates", () => {
     "invalid", 2.0, -200, 34.05, 1000
   );
 
-  assert.equal(isValidEarthquake(invalid), false);
+  expect(isValidEarthquake(invalid)).toBe(false);
 });
 
 test("removes invalid earthquake records", () => {
@@ -86,7 +85,7 @@ test("removes invalid earthquake records", () => {
 
   const results = validateEarthquakes(collection);
 
-  assert.equal(results.length, 2);
+  expect(results.length).toBe(2);
 });
 
 test("filters earthquakes to California region", () => {
@@ -96,11 +95,10 @@ test("filters earthquakes to California region", () => {
     newYork,
   ]);
 
-  assert.equal(results.length, 2);
-  assert.deepEqual(
-    results.map((earthquake) => earthquake.id),
-    ["la", "sf"]
-  );
+  expect(results.length).toBe(2);
+  expect(
+    results.map((earthquake) => earthquake.id)
+  ).toEqual(["la", "sf"]);
 });
 
 test("sorts earthquakes by magnitude", () => {
@@ -110,10 +108,9 @@ test("sorts earthquakes by magnitude", () => {
     newYork,
   ]);
 
-  assert.deepEqual(
-    results.map((earthquake) => earthquake.id),
-    ["sf", "ny", "la"]
-  );
+  expect(
+    results.map((earthquake) => earthquake.id)
+  ).toEqual(["sf", "ny", "la"]);
 });
 
 test("calculates earthquake statistics", () => {
@@ -123,22 +120,23 @@ test("calculates earthquake statistics", () => {
     newYork,
   ]);
 
-  assert.equal(stats.totalEarthquakes, 3);
-  assert.equal(stats.strongestMagnitude, 4.2);
-  assert.equal(stats.strongestEarthquake?.id, "sf");
-  assert.equal(stats.recentEarthquake?.id, "ny");
-  assert.equal(stats.magnitude4Plus, 1);
-  assert.ok(
-    Math.abs(stats.averageMagnitude! - 3.2666666667) < 0.000001
+  expect(stats.totalEarthquakes).toBe(3);
+  expect(stats.strongestMagnitude).toBe(4.2);
+  expect(stats.strongestEarthquake?.id).toBe("sf");
+  expect(stats.recentEarthquake?.id).toBe("ny");
+  expect(stats.magnitude4Plus).toBe(1);
+  expect(stats.averageMagnitude).toBeCloseTo(
+    3.2666666667,
+    5
   );
 });
 
 test("handles an empty dataset", () => {
   const stats = calculateEarthquakeStats([]);
 
-  assert.equal(stats.totalEarthquakes, 0);
-  assert.equal(stats.averageMagnitude, null);
-  assert.equal(stats.strongestEarthquake, null);
-  assert.equal(stats.recentEarthquake, null);
-  assert.equal(stats.magnitude4Plus, 0);
+  expect(stats.totalEarthquakes).toBe(0);
+  expect(stats.averageMagnitude).toBeNull();
+  expect(stats.strongestEarthquake).toBeNull();
+  expect(stats.recentEarthquake).toBeNull();
+  expect(stats.magnitude4Plus).toBe(0);
 });
