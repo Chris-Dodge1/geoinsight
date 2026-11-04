@@ -336,3 +336,78 @@ body {
     width: 100%;
   }
 }
+
+/* Interactive earthquake results */
+.earthquake-results {
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.results-table-scroll {
+  overflow-x: auto;
+  max-height: 480px;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+
+.results-table caption {
+  text-align: left;
+  padding: 0 0 12px;
+  color: #64748b;
+}
+
+.results-table th,
+.results-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.results-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.results-table tbody th {
+  width: 65%;
+  font-weight: normal;
+  overflow-wrap: anywhere;
+}
+
+.result-row-active { cursor: pointer; }
+.result-row-active:hover,
+.result-row-active:focus-within { background: #eff6ff; }
+
+.result-location {
+  min-height: 44px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: #1d4ed8;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.result-location:disabled { color: #64748b; cursor: default; }
+.result-location:focus-visible,
+.results-table-scroll:focus-visible,
+#results-sort:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+@media (max-width: 480px) {
+  .earthquake-results { padding: 12px; }
+  .results-table th,
+  .results-table td { padding: 8px; }
+  .earthquake-results .search-field { width: 100%; }
+  .results-table { min-width: 320px; }
+}
