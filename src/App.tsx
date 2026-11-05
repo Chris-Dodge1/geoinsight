@@ -4,6 +4,7 @@ import type MapView from "@arcgis/core/views/MapView";
 import EarthquakeResults from "./components/EarthquakeResults";
 import { zoomToEarthquake } from "./gis/earthquakeNavigation";
 import EarthquakeDashboard from "./components/EarthquakeDashboard";
+import EarthquakeTrends from "./components/EarthquakeTrends";
 import { calculateDashboardStats } from "./components/dashboardStats";
 
 import {
@@ -365,6 +366,8 @@ function App() {
         status={feedStatus}
         scopeLabel={dashboardScope}
       />
+      
+      <EarthquakeTrends />
 
       <section className="map-container">
         <arcgis-map
