@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type ArcGISMap from "@arcgis/core/Map";
+import type MapView from "@arcgis/core/views/MapView";
+import EarthquakeResults from "./components/EarthquakeResults";
+import { zoomToEarthquake } from "./gis/earthquakeNavigation";
 import EarthquakeDashboard from "./components/EarthquakeDashboard";
 import { calculateDashboardStats } from "./components/dashboardStats";
 
@@ -42,6 +45,8 @@ function updateEarthquakeLayer(
 
 function App() {
   const mapRef = useRef<ArcGISMap | null>(null);
+  const viewRef = useRef<MapView | null>(null);
+  const [navigationError, setNavigationError] = useState<string | null>(null);
 
   const [mapReady, setMapReady] = useState(false);
   const [earthquakes, setEarthquakes] = useState<Earthquake[]>([]);
@@ -374,6 +379,7 @@ function App() {
             }
 
             mapRef.current = component.map;
+            viewRef.current = component.view;
             setMapReady(true);
           }}
           style={{
@@ -386,6 +392,21 @@ function App() {
           <arcgis-zoom slot="top-left" />
         </arcgis-map>
       </section>
+
+      <EarthquakeResults
+        earthquakes={visibleEarthquakes}
+        status={feedStatus}
+        mapReady={mapReady}
+        onSelect={(earthquake) => {
+          const view = viewRef.current;
+          if (!view) return;
+          setNavigationError(null);
+          void zoomToEarthquake(view, earthquake).catch(() => {
+            setNavigationError("Unable to zoom to this earthquake. Please try again.");
+          });
+        }}
+      />
+      {navigationError && <p className="search-error" role="alert">{navigationError}</p>}
 
       <section className="earthquake-legend">
         <h3>Earthquake Magnitude</h3>
