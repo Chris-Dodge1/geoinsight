@@ -1,11 +1,17 @@
 
 import type { EarthquakeCollection } from "../types/earthquake";
 
-const USGS_API_URL =
-  "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson";
+export type EarthquakeFeedPeriod = "day" | "week" | "month";
 
-export async function fetchEarthquakes(): Promise<EarthquakeCollection> {
-  const response = await fetch(USGS_API_URL);
+const USGS_API_BASE_URL =
+  "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary";
+
+export async function fetchEarthquakes(
+  period: EarthquakeFeedPeriod = "day"
+): Promise<EarthquakeCollection> {
+  const response = await fetch(
+    `${USGS_API_BASE_URL}/all_${period}.geojson`
+  );
 
   if (!response.ok) {
     throw new Error(

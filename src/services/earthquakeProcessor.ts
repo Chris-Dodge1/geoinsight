@@ -57,7 +57,35 @@ export function sortEarthquakesByMagnitude(
   earthquakes: EarthquakeFeature[]
 ): EarthquakeFeature[] {
   return [...earthquakes].sort(
-    (a, b) => (b.properties.mag ?? -Infinity) -
-              (a.properties.mag ?? -Infinity)
+    (a, b) =>
+      (b.properties.mag ?? -Infinity) -
+      (a.properties.mag ?? -Infinity)
   );
+}
+
+// Filter earthquakes by a specified number of days.
+export function filterEarthquakesByTime(
+  earthquakes: EarthquakeFeature[],
+  days: number,
+  currentTime: number = Date.now()
+): EarthquakeFeature[] {
+  if (!Number.isFinite(days) || days < 0) {
+    throw new RangeError(
+      "Days must be a non-negative number"
+    );
+  }
+
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  const cutoffTime =
+    currentTime - days * millisecondsPerDay;
+
+  return earthquakes.filter((earthquake) => {
+    const earthquakeTime = earthquake.properties.time;
+
+    return (
+      Number.isFinite(earthquakeTime) &&
+      earthquakeTime >= cutoffTime &&
+      earthquakeTime <= currentTime
+    );
+  });
 }

@@ -10,6 +10,13 @@ export interface EarthquakeStats {
   magnitude4Plus: number;
 }
 
+export interface DailyEarthquakeTrend {
+  date: string;
+  totalEarthquakes: number;
+  averageMagnitude: number | null;
+  strongestMagnitude: number | null;
+}
+
 // Calculate statistics from validated earthquake records.
 export function calculateEarthquakeStats(
   earthquakes: EarthquakeFeature[]
@@ -60,4 +67,56 @@ export function calculateEarthquakeStats(
       (earthquake) => earthquake.properties.mag! >= 4
     ).length,
   };
+}
+
+// Group earthquakes by UTC date and calculate daily statistics.
+export function calculateDailyEarthquakeTrends(
+  earthquakes: EarthquakeFeature[]
+): DailyEarthquakeTrend[] {
+  const dailyGroups = new Map<string, EarthquakeFeature[]>();
+
+  for (const earthquake of earthquakes) {
+    const time = earthquake.properties.time;
+
+    if (!Number.isFinite(time)) {
+      continue;
+    }
+
+    const date = new Date(time).toISOString().slice(0, 10);
+
+    const group = dailyGroups.get(date) ?? [];
+    group.push(earthquake);
+    dailyGroups.set(date, group);
+  }
+
+  return Array.from(dailyGroups.entries())
+    .map(([date, group]) => {
+      const withMagnitude = group.filter(
+        (earthquake) =>
+          Number.isFinite(earthquake.properties.mag)
+      );
+
+      const magnitudes = withMagnitude.map(
+        (earthquake) => earthquake.properties.mag!
+      );
+
+      const totalMagnitude = magnitudes.reduce(
+        (sum, magnitude) => sum + magnitude,
+        0
+      );
+
+      return {
+        date,
+        totalEarthquakes: group.length,
+        averageMagnitude:
+          magnitudes.length > 0
+            ? totalMagnitude / magnitudes.length
+            : null,
+        strongestMagnitude:
+          magnitudes.length > 0
+            ? Math.max(...magnitudes)
+            : null,
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
