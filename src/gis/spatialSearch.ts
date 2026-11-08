@@ -10,6 +10,7 @@ import * as geodesicBufferOperator from
   "@arcgis/core/geometry/operators/geodesicBufferOperator";
 
 import type { Earthquake } from "./earthquakeLayer";
+import { regions, type RegionId } from "./regions";
 
 export interface SearchLocation {
   name: string;
@@ -17,6 +18,8 @@ export interface SearchLocation {
   longitude: number;
 }
 
+// City reference points (not municipal boundaries). New coordinates from GeoNames:
+// https://www.geonames.org/US/CA/largest-cities-in-california.html
 export const searchLocations: SearchLocation[] = [
   {
     name: "Riverside",
@@ -33,7 +36,23 @@ export const searchLocations: SearchLocation[] = [
     latitude: 33.8303,
     longitude: -116.5453,
   },
+  { name: "Los Angeles", latitude: 34.052, longitude: -118.244 },
+  { name: "San Diego", latitude: 32.716, longitude: -117.165 },
+  { name: "Bakersfield", latitude: 35.373, longitude: -119.019 },
+  { name: "San Francisco", latitude: 37.775, longitude: -122.419 },
+  { name: "Sacramento", latitude: 38.582, longitude: -121.494 },
+  { name: "San Jose", latitude: 37.339, longitude: -121.895 },
+  { name: "Fresno", latitude: 36.748, longitude: -119.772 },
 ];
+
+// Use the same approximate region envelopes as earthquake filtering.
+export function getSearchLocationsForRegion(regionId: RegionId): SearchLocation[] {
+  const bounds = regions[regionId].bounds;
+  return searchLocations.filter(({ latitude, longitude }) =>
+    latitude >= bounds.minLatitude && latitude <= bounds.maxLatitude &&
+    longitude >= bounds.minLongitude && longitude <= bounds.maxLongitude
+  );
+}
 
 // Convert geographic coordinates into ArcGIS Points.
 function createPoint(

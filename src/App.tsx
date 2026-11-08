@@ -12,7 +12,7 @@ import {
 } from "./gis/earthquakeLayer";
 
 import {
-  searchLocations,
+  getSearchLocationsForRegion,
   searchEarthquakesByRadius,
   createSearchRadiusLayer,
 } from "./gis/spatialSearch";
@@ -20,6 +20,8 @@ import {
 import { filterEarthquakesByMagnitude } from "./gis/magnitudeFilter";
 import { fetchEarthquakes } from "./services/usgsService";
 import { convertUSGSFeed } from "./gis/usgsAdapter";
+
+import { defaultRegion, regions, filterEarthquakesByRegion, type RegionId } from "./gis/regions";
 
 type FeedStatus = "loading" | "ready" | "error";
 
@@ -44,6 +46,9 @@ function updateEarthquakeLayer(
 }
 
 function App() {
+  const [regionId, setRegionId] = useState<RegionId>(defaultRegion);
+  const region = regions[regionId];
+  const supportedLocations = getSearchLocationsForRegion(regionId);
   const mapRef = useRef<ArcGISMap | null>(null);
   const viewRef = useRef<MapView | null>(null);
   const [navigationError, setNavigationError] = useState<string | null>(null);
@@ -86,7 +91,7 @@ function App() {
 
         if (!active) return;
 
-        setEarthquakes(converted);
+        setEarthquakes(filterEarthquakesByRegion(converted, "california"));
         setFeedError(null);
         setFeedStatus("ready");
       } catch (error) {
@@ -111,18 +116,23 @@ function App() {
     };
   }, []);
 
+  const regionalEarthquakes = useMemo(
+    () => filterEarthquakesByRegion(earthquakes, regionId),
+    [earthquakes, regionId]
+  );
+
   // Apply magnitude filtering to either all earthquakes
   // or the results of the current radius search.
   const visibleEarthquakes = useMemo(() => {
     const source = activeSearch
       ? activeSearch.earthquakes
-      : earthquakes;
+      : regionalEarthquakes;
 
     return filterEarthquakesByMagnitude(
       source,
       minMagnitude
     );
-  }, [earthquakes, activeSearch, minMagnitude]);
+  }, [regionalEarthquakes, activeSearch, minMagnitude]);
 
   // Use the same dataset as the markers, including both active filters.
   const dashboardStats = useMemo(
@@ -131,8 +141,8 @@ function App() {
   );
 
   const dashboardScope = `${activeSearch
-    ? `Within ${activeSearch.radiusKm} km of ${activeSearch.locationName}`
-    : "Southern California"} · ${minMagnitude === null
+    ? `Within ${activeSearch.radiusKm} km of ${activeSearch.locationName} · ${region.label}`
+    : region.label} · ${minMagnitude === null
     ? "All magnitudes"
     : `Magnitude ${minMagnitude.toFixed(1)}+`}`;
 
@@ -151,7 +161,7 @@ function App() {
   const handleSearch = async () => {
     const map = mapRef.current;
 
-    const location = searchLocations.find(
+    const location = supportedLocations.find(
       (item) => item.name === selectedLocation
     );
 
@@ -165,7 +175,7 @@ function App() {
 
     try {
       const results = await searchEarthquakesByRadius(
-        earthquakes,
+        regionalEarthquakes,
         location,
         radiusKm
       );
@@ -217,6 +227,21 @@ function App() {
     setSearchError(null);
   };
 
+  const changeRegion = (nextRegion: RegionId) => {
+    const map = mapRef.current;
+    const radiusLayer = map?.findLayerById("search-radius");
+    if (map && radiusLayer) map.remove(radiusLayer);
+    setActiveSearch(null);
+    setSearchError(null);
+    setNavigationError(null);
+    if (!getSearchLocationsForRegion(nextRegion).some(
+      (location) => location.name === selectedLocation
+    )) {
+      setSelectedLocation("Riverside");
+    }
+    setRegionId(nextRegion);
+  };
+
   const controlsDisabled =
     !mapReady || feedStatus !== "ready" || isSearching;
 
@@ -224,13 +249,22 @@ function App() {
     <main className="app-container">
       <header className="app-header">
         <h1>GeoInsight</h1>
-        <p>Southern California Earthquake Analytics</p>
+        <p>{region.label} Earthquake Analytics</p>
       </header>
 
       <section className="search-panel">
         <h2>Earthquake Search &amp; Filtering</h2>
 
         <div className="search-controls">
+          <div className="search-field">
+            <label htmlFor="region">Region</label>
+            <select id="region" value={regionId} disabled={isSearching}
+              onChange={(event) => changeRegion(event.target.value as RegionId)}>
+              {Object.entries(regions).map(([id, config]) => (
+                <option key={id} value={id}>{config.label}</option>
+              ))}
+            </select>
+          </div>
           <div className="search-field">
             <label htmlFor="location">
               Search Location
@@ -244,7 +278,7 @@ function App() {
                 setSelectedLocation(event.target.value)
               }
             >
-              {searchLocations.map((location) => (
+              {supportedLocations.map((location) => (
                 <option
                   key={location.name}
                   value={location.name}
@@ -329,9 +363,8 @@ function App() {
         {feedStatus === "ready" && (
           <p className="legend-note" role="status">
             Showing {visibleEarthquakes.length} of{" "}
-            {earthquakes.length} USGS past-day earthquake
-            observations in the configured Southern
-            California region.
+            {regionalEarthquakes.length} USGS past-day earthquake
+            observations in the approximate {region.label} geographic region.
           </p>
         )}
 
@@ -345,7 +378,7 @@ function App() {
           <p className="search-result" role="status">
             Found {visibleEarthquakes.length} earthquake(s)
             within {activeSearch.radiusKm} km of{" "}
-            {activeSearch.locationName}
+            {activeSearch.locationName} in {region.label}
             {minMagnitude !== null
               ? ` at magnitude ${minMagnitude.toFixed(1)}+`
               : ""}
@@ -369,8 +402,8 @@ function App() {
       <section className="map-container">
         <arcgis-map
           basemap="osm"
-          center="-116.8, 34.0"
-          zoom={8}
+          center={region.center}
+          zoom={region.zoom}
           onarcgisViewReadyChange={(event) => {
             const component = event.target;
 

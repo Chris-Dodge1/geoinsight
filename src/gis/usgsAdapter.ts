@@ -1,13 +1,5 @@
 import type { Earthquake } from "./earthquakeLayer";
 
-// Approximate Southern California geographic bounds.
-const REGION = {
-  minLatitude: 32,
-  maxLatitude: 36.5,
-  minLongitude: -121,
-  maxLongitude: -114,
-};
-
 function isRecord(
   value: unknown
 ): value is Record<string, unknown> {
@@ -64,16 +56,6 @@ export function convertUSGSFeed(
       longitude > 180 ||
       latitude < -90 ||
       latitude > 90
-    ) {
-      continue;
-    }
-
-    // Keep earthquakes within the target region.
-    if (
-      latitude < REGION.minLatitude ||
-      latitude > REGION.maxLatitude ||
-      longitude < REGION.minLongitude ||
-      longitude > REGION.maxLongitude
     ) {
       continue;
     }
