@@ -9,6 +9,8 @@ import {
 } from "./spatialSearch";
 
 import type { Earthquake } from "./earthquakeLayer";
+import { getSearchLocationsForRegion } from "./spatialSearch";
+import { filterEarthquakesByRegion } from "./regions";
 
 // Mock ArcGIS dependencies so tests can run in Node.
 vi.mock("@arcgis/core/geometry/Point", () => ({
@@ -177,5 +179,73 @@ describe("GeoInsight spatial radius search", () => {
       expect.anything(),
       { unit: "kilometers" }
     );
+  });
+});
+const expectedLocations = [
+  { name: "Riverside", latitude: 33.9533, longitude: -117.3962 },
+  { name: "Redlands", latitude: 34.0556, longitude: -117.1825 },
+  { name: "Palm Springs", latitude: 33.8303, longitude: -116.5453 },
+  { name: "Los Angeles", latitude: 34.052, longitude: -118.244 },
+  { name: "San Diego", latitude: 32.716, longitude: -117.165 },
+  { name: "Bakersfield", latitude: 35.373, longitude: -119.019 },
+  { name: "San Francisco", latitude: 37.775, longitude: -122.419 },
+  { name: "Sacramento", latitude: 38.582, longitude: -121.494 },
+  { name: "San Jose", latitude: 37.339, longitude: -121.895 },
+  { name: "Fresno", latitude: 36.748, longitude: -119.772 },
+];
+
+describe("California search location configuration", () => {
+  it("contains all ten city reference points with their geographic coordinates", () => {
+    expect(searchLocations).toEqual(expectedLocations);
+    expect(new Set(searchLocations.map(({ name }) => name)).size).toBe(10);
+  });
+
+  it("offers six Southern California locations and all ten statewide without changing the configuration", () => {
+    const before = structuredClone(searchLocations);
+    expect(getSearchLocationsForRegion("southernCalifornia")).toEqual(expectedLocations.slice(0, 6));
+    expect(getSearchLocationsForRegion("california")).toEqual(expectedLocations);
+    expect(searchLocations).toEqual(before);
+  });
+});
+
+describe("Northern California radius searches", () => {
+  // Coordinate-based spherical distance stub: ArcGIS's geodetic WASM asset
+  // requires browser loading. Production continues to use the ArcGIS operator.
+  beforeEach(() => {
+    vi.mocked(distanceOperator.load).mockResolvedValue(undefined);
+    vi.mocked(distanceOperator.execute).mockImplementation((from, to) => {
+      if (!("latitude" in from) || !("latitude" in to) ||
+          !("longitude" in from) || !("longitude" in to) ||
+          typeof from.latitude !== "number" || typeof to.latitude !== "number" ||
+          typeof from.longitude !== "number" || typeof to.longitude !== "number") return NaN;
+      const radians = (degrees: number) => degrees * Math.PI / 180;
+      const dLat = radians(to.latitude - from.latitude);
+      const dLon = radians(to.longitude - from.longitude);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(radians(from.latitude)) *
+        Math.cos(radians(to.latitude)) * Math.sin(dLon / 2) ** 2;
+      return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    });
+  });
+
+  it.each([25, 50, 100])("filters earthquakes around San Francisco within %i km", async (radius) => {
+    const location = searchLocations.find(({ name }) => name === "San Francisco")!;
+    const data = [
+      { ...earthquakes[0], id: "sf", latitude: location.latitude, longitude: location.longitude },
+      { ...earthquakes[0], id: "oakland", latitude: 37.8044, longitude: -122.2712 },
+      { ...earthquakes[0], id: "san-jose", latitude: 37.339, longitude: -121.895 },
+      { ...earthquakes[0], id: "sacramento", latitude: 38.582, longitude: -121.494 },
+      ...earthquakes,
+    ];
+    const before = structuredClone(data);
+    const results = await searchEarthquakesByRadius(filterEarthquakesByRegion(data, "california"), location, radius);
+    expect(results.map(({ id }) => id)).toEqual(radius === 100 ? ["sf", "oakland", "san-jose"] : ["sf", "oakland"]);
+    expect(data).toEqual(before);
+  });
+
+  it("retains Southern California geodetic searches", async () => {
+    const results = await searchEarthquakesByRadius(
+      filterEarthquakesByRegion(earthquakes, "southernCalifornia"), riverside, 50
+    );
+    expect(results.map(({ id }) => id)).toEqual(["1", "2"]);
   });
 });

@@ -48,7 +48,7 @@ describe("GeoInsight USGS adapter", () => {
     ]);
   });
 
-  it("filters earthquakes outside Southern California", () => {
+  it("converts valid observations independently of region", () => {
     const feed = makeFeed([
       makeFeature("riverside", -117.4, 33.95, 5, 2.1),
       makeFeature("sf", -122.42, 37.77, 8, 3.5),
@@ -57,7 +57,7 @@ describe("GeoInsight USGS adapter", () => {
 
     const results = convertUSGSFeed(feed);
 
-    expect(results.map((eq) => eq.id)).toEqual(["riverside"]);
+    expect(results.map((eq) => eq.id)).toEqual(["riverside", "sf", "ny"]);
   });
 
   it("rejects invalid coordinates", () => {
